@@ -29,6 +29,7 @@ impl State {
         });
 
         let surface = unsafe { instance.create_surface(&window) }.unwrap();
+        // surface.configure(device, config);
 
         let adapter = instance
             // .request_adapter(&wgpu::RequestAdapterOptions {
@@ -71,7 +72,7 @@ impl State {
             format: surface_format,
             width: size.width,
             height: size.height,
-            present_mode: surface_caps.present_modes[0],
+            present_mode: wgpu::PresentMode::Immediate,
             alpha_mode: surface_caps.alpha_modes[0],
             view_formats: vec![],
         };
@@ -211,13 +212,16 @@ pub async fn run() {
 
     let mut state = State::new(window).await;
 
+    // let mut should_redraw = true;
+
     // Run the event_loop
     event_loop.run(move |event, _, mut control_flow| match event {
         Event::WindowEvent {
             ref event,
             window_id,
         } if window_id == state.window().id() => {
-            handle_window_events(&mut state, &event, &mut control_flow)
+            handle_window_events(&mut state, &event, &mut control_flow);
+            // should_redraw = false;
         }
         Event::RedrawRequested(window_id) if window_id == state.window().id() => {
             state.update();
@@ -227,6 +231,16 @@ pub async fn run() {
                 Err(wgpu::SurfaceError::OutOfMemory) => *control_flow = ControlFlow::Exit,
                 Err(e) => eprintln!("{:?}", e),
             }
+
+            // let encoder = state
+            //     .device
+            //     .create_command_encoder(&wgpu::CommandEncoderDescriptor { label: None });
+
+            // state.queue.submit(Some(encoder.finish()));
+
+            // if should_redraw {
+            //     state.window.request_redraw();
+            // }
         }
         Event::MainEventsCleared => {
             state.window().request_redraw();
