@@ -67,6 +67,7 @@ fn run() {
     });
 }
 
+#[allow(dead_code)]
 fn main() {
     run();
 }
