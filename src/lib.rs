@@ -2,7 +2,7 @@ use winit::{
     event::*,
     event_loop::{ControlFlow, EventLoop},
     window::Window,
-    window::WindowBuilder, dpi::PhysicalSize,
+    window::WindowBuilder,
 };
 
 #[cfg(target_arch = "wasm32")]
@@ -15,6 +15,7 @@ struct State {
     config: wgpu::SurfaceConfiguration,
     size: winit::dpi::PhysicalSize<u32>,
     window: Window,
+    render_pipeline: wgpu::RenderPipeline,
 }
 
 impl State {
@@ -27,12 +28,9 @@ impl State {
             backends: wgpu::Backends::all(),
             dx12_shader_compiler: Default::default(),
         });
-        // let instance = wgpu::Instance::new(wgpu::Backends::GL);
 
         let surface = unsafe { instance.create_surface(&window) }.unwrap();
-        // surface.configure(device, config);
 
-        #[cfg(target_arch = "wasm32")]
         let adapter = instance
             .request_adapter(&wgpu::RequestAdapterOptions {
                 power_preference: wgpu::PowerPreference::default(),
@@ -40,20 +38,6 @@ impl State {
                 force_fallback_adapter: false,
             })
             .await
-            .unwrap();
-
-        #[cfg(not(target_arch = "wasm32"))]
-        let adapter = instance
-            // .request_adapter(&wgpu::RequestAdapterOptions {
-            //     power_preference: wgpu::PowerPreference::HighPerformance,
-            //     force_fallback_adapter: false,
-            //     compatible_surface: Some(&surface),
-            // })
-            // .await
-            // .unwrap();
-            .enumerate_adapters(wgpu::Backends::all())
-            .filter(|adapter| adapter.is_surface_supported(&surface))
-            .next()
             .unwrap();
 
         let (device, queue) = adapter
@@ -85,13 +69,69 @@ impl State {
             format: surface_format,
             width: size.width,
             height: size.height,
-            present_mode: wgpu::PresentMode::Fifo,
+            present_mode: surface_caps.present_modes[0],
             alpha_mode: surface_caps.alpha_modes[0],
             view_formats: vec![],
         };
         surface.configure(&device, &config);
 
-        // let modes = &surface_caps.present_modes;
+        // Shortcut
+        // let shader = device.create_shader_module(wgpu::include_wgsl!("shader.wgsl"));
+        let shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
+            label: Some("Shader"),
+            source: wgpu::ShaderSource::Wgsl(include_str!("shader.wgsl").into()),
+        });
+
+        let render_pipeline_layout =
+            device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+                label: Some("Render Pipeline Layout"),
+                bind_group_layouts: &[],
+                push_constant_ranges: &[],
+            });
+
+        let render_pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+            label: Some("Render Pipeline"),
+            layout: Some(&render_pipeline_layout),
+            vertex: wgpu::VertexState {
+                module: &shader,
+                entry_point: "vs_main",
+                buffers: &[],
+            },
+            fragment: Some(wgpu::FragmentState {
+                module: &shader,
+                entry_point: "fs_main",
+                targets: &[Some(wgpu::ColorTargetState {
+                    format: config.format,
+                    blend: Some(wgpu::BlendState {
+                        color: wgpu::BlendComponent::REPLACE,
+                        alpha: wgpu::BlendComponent::REPLACE,
+                    }),
+                    write_mask: wgpu::ColorWrites::ALL,
+                })],
+            }),
+            primitive: wgpu::PrimitiveState {
+                topology: wgpu::PrimitiveTopology::TriangleList,
+                strip_index_format: None,
+                front_face: wgpu::FrontFace::Ccw,
+                cull_mode: Some(wgpu::Face::Back),
+                // Setting this to anything other than Fill requires Features::POLYGON_MODE_LINE
+                // or Features::POLYGON_MODE_POINT
+                polygon_mode: wgpu::PolygonMode::Fill,
+                // Requires Features::DEPTH_CLIP_CONTROL
+                unclipped_depth: false,
+                // Requires Features::CONSERVATIVE_RESTERIZATION
+                conservative: false,
+            },
+            depth_stencil: None,
+            multisample: wgpu::MultisampleState {
+                count: 1,
+                mask: !0,
+                alpha_to_coverage_enabled: false,
+            },
+            // If the pipeline will be used with a multiview render pass, this
+            // indicates how many array layers the attachments will have.
+            multiview: None,
+        });
 
         Self {
             window,
@@ -100,6 +140,7 @@ impl State {
             queue,
             config,
             size,
+            render_pipeline,
         }
     }
 
@@ -113,12 +154,10 @@ impl State {
             self.config.width = new_size.width;
             self.config.height = new_size.height;
             self.surface.configure(&self.device, &self.config);
-
-            // #[cfg(target_arch = "wasm32")]
-            // self.window.set_inner_size(PhysicalSize::new(self.size.width, self.size.height));
         }
     }
 
+    #[allow(unused_variables)]
     pub fn input(&mut self, event: &winit::event::WindowEvent) -> bool {
         false
     }
@@ -138,23 +177,29 @@ impl State {
             });
 
         {
-            let _render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+            let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
                 label: Some("Render Pass"),
-                color_attachments: &[Some(wgpu::RenderPassColorAttachment {
-                    view: &view,
-                    resolve_target: None,
-                    ops: wgpu::Operations {
-                        load: wgpu::LoadOp::Clear(wgpu::Color {
-                            r: 0.1,
-                            g: 0.2,
-                            b: 0.3,
-                            a: 1.0,
-                        }),
-                        store: true,
-                    },
-                })],
+                color_attachments: &[
+                    // This is what @location(0) in the fragment shader targets
+                    Some(wgpu::RenderPassColorAttachment {
+                        view: &view,
+                        resolve_target: None,
+                        ops: wgpu::Operations {
+                            load: wgpu::LoadOp::Clear(wgpu::Color {
+                                r: 0.1,
+                                g: 0.2,
+                                b: 0.3,
+                                a: 1.0,
+                            }),
+                            store: true,
+                        },
+                    }),
+                ],
                 depth_stencil_attachment: None,
             });
+
+            render_pass.set_pipeline(&self.render_pipeline);
+            render_pass.draw(0..3, 0..1);
         }
 
         self.queue.submit(std::iter::once(encoder.finish()));
@@ -199,7 +244,6 @@ pub async fn run() {
     }
 
     let mut state = State::new(window).await;
-    // let mut app_focus = false;
 
     // Run the event_loop
     event_loop.run(move |event, _, control_flow| match event {
@@ -232,15 +276,20 @@ pub async fn run() {
             state.update();
             match state.render() {
                 Ok(_) => {}
-                Err(wgpu::SurfaceError::Lost) => state.resize(state.size),
+                // Reconfigure the surface if it's lost or outdated
+                Err(wgpu::SurfaceError::Lost | wgpu::SurfaceError::Outdated) => {
+                    state.resize(state.size)
+                }
+                // The system is out of memory, we should probably quit
                 Err(wgpu::SurfaceError::OutOfMemory) => *control_flow = ControlFlow::Exit,
-                Err(e) => eprintln!("{:?}", e),
+                // We're ignoring timeouts
+                Err(wgpu::SurfaceError::Timeout) => log::warn!("Surface timeout"),
             }
         }
         Event::MainEventsCleared => {
-            if state.window().is_visible().unwrap() {
-                state.window().request_redraw();
-            }
+            // RedrawRequested will only trigger once, unless we manually
+            // request it
+            state.window().request_redraw();
         }
         _ => {}
     });
