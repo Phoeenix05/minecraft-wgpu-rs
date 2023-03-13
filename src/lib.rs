@@ -2,7 +2,7 @@ use winit::{
     event::*,
     event_loop::{ControlFlow, EventLoop},
     window::Window,
-    window::WindowBuilder,
+    window::WindowBuilder, dpi::PhysicalSize,
 };
 
 #[cfg(target_arch = "wasm32")]
@@ -27,17 +27,30 @@ impl State {
             backends: wgpu::Backends::all(),
             dx12_shader_compiler: Default::default(),
         });
+        // let instance = wgpu::Instance::new(wgpu::Backends::GL);
 
         let surface = unsafe { instance.create_surface(&window) }.unwrap();
         // surface.configure(device, config);
 
+        #[cfg(target_arch = "wasm32")]
+        let adapter = instance
+            .request_adapter(&wgpu::RequestAdapterOptions {
+                power_preference: wgpu::PowerPreference::default(),
+                compatible_surface: Some(&surface),
+                force_fallback_adapter: false,
+            })
+            .await
+            .unwrap();
+
+        #[cfg(not(target_arch = "wasm32"))]
         let adapter = instance
             // .request_adapter(&wgpu::RequestAdapterOptions {
-            //     power_preference: wgpu::PowerPreference::default(),
-            //     compatible_surface: Some(&surface),
+            //     power_preference: wgpu::PowerPreference::HighPerformance,
             //     force_fallback_adapter: false,
+            //     compatible_surface: Some(&surface),
             // })
             // .await
+            // .unwrap();
             .enumerate_adapters(wgpu::Backends::all())
             .filter(|adapter| adapter.is_surface_supported(&surface))
             .next()
@@ -72,7 +85,7 @@ impl State {
             format: surface_format,
             width: size.width,
             height: size.height,
-            present_mode: wgpu::PresentMode::Immediate,
+            present_mode: wgpu::PresentMode::Fifo,
             alpha_mode: surface_caps.alpha_modes[0],
             view_formats: vec![],
         };
@@ -100,6 +113,9 @@ impl State {
             self.config.width = new_size.width;
             self.config.height = new_size.height;
             self.surface.configure(&self.device, &self.config);
+
+            // #[cfg(target_arch = "wasm32")]
+            // self.window.set_inner_size(PhysicalSize::new(self.size.width, self.size.height));
         }
     }
 
@@ -148,34 +164,6 @@ impl State {
     }
 }
 
-fn handle_window_events(state: &mut State, event: &WindowEvent, control_flow: &mut ControlFlow) {
-    if state.input(event) {
-        return;
-    }
-
-    match event {
-        WindowEvent::CloseRequested
-        | WindowEvent::KeyboardInput {
-            input:
-                KeyboardInput {
-                    state: ElementState::Pressed,
-                    virtual_keycode: Some(VirtualKeyCode::Escape),
-                    ..
-                },
-            ..
-        } => *control_flow = ControlFlow::Exit,
-        WindowEvent::Resized(physical_size) => {
-            state.resize(*physical_size);
-        }
-        WindowEvent::ScaleFactorChanged { new_inner_size, .. } => {
-            state.resize(**new_inner_size);
-        }
-        _ => {}
-    }
-}
-
-// fn handle_draw_events(state: &mut State, event: &Event, control_flow: &mut ControlFlow) {}
-
 #[cfg_attr(target_arch = "wasm32", wasm_bindgen(start))]
 pub async fn run() {
     // Initialize env_logger
@@ -196,7 +184,7 @@ pub async fn run() {
     #[cfg(target_arch = "wasm32")]
     {
         use winit::dpi::PhysicalSize;
-        window.set_inner_size(PhysicalSize::new(450, 400));
+        window.set_inner_size(PhysicalSize::new(1280, 720));
 
         use winit::platform::web::WindowExtWebSys;
         web_sys::window()
@@ -211,18 +199,35 @@ pub async fn run() {
     }
 
     let mut state = State::new(window).await;
-
-    // let mut should_redraw = true;
+    // let mut app_focus = false;
 
     // Run the event_loop
-    event_loop.run(move |event, _, mut control_flow| match event {
+    event_loop.run(move |event, _, control_flow| match event {
         Event::WindowEvent {
             ref event,
             window_id,
-        } if window_id == state.window().id() => {
-            handle_window_events(&mut state, &event, &mut control_flow);
-            // should_redraw = false;
-        }
+        } if window_id == state.window().id() => match event {
+            WindowEvent::CloseRequested
+            | WindowEvent::KeyboardInput {
+                input:
+                    KeyboardInput {
+                        state: ElementState::Pressed,
+                        virtual_keycode: Some(VirtualKeyCode::Escape),
+                        ..
+                    },
+                ..
+            } => *control_flow = ControlFlow::Exit,
+            WindowEvent::Resized(physical_size) => {
+                state.resize(*physical_size);
+            }
+            WindowEvent::ScaleFactorChanged { new_inner_size, .. } => {
+                state.resize(**new_inner_size);
+            }
+            // WindowEvent::CursorMoved { position, .. } => {}
+            // WindowEvent::Focused(false) => app_focus = false,
+            // WindowEvent::Focused(true) => app_focus = true,
+            _ => {}
+        },
         Event::RedrawRequested(window_id) if window_id == state.window().id() => {
             state.update();
             match state.render() {
@@ -231,19 +236,11 @@ pub async fn run() {
                 Err(wgpu::SurfaceError::OutOfMemory) => *control_flow = ControlFlow::Exit,
                 Err(e) => eprintln!("{:?}", e),
             }
-
-            // let encoder = state
-            //     .device
-            //     .create_command_encoder(&wgpu::CommandEncoderDescriptor { label: None });
-
-            // state.queue.submit(Some(encoder.finish()));
-
-            // if should_redraw {
-            //     state.window.request_redraw();
-            // }
         }
         Event::MainEventsCleared => {
-            state.window().request_redraw();
+            if state.window().is_visible().unwrap() {
+                state.window().request_redraw();
+            }
         }
         _ => {}
     });
