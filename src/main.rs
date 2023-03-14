@@ -1,7 +1,5 @@
-mod lib;
-use lib::run;
+use minecraft_wgpu_rs::run;
 
-#[allow(dead_code)]
 fn main() {
     pollster::block_on(run());
 }
