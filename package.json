@@ -1,6 +1,6 @@
 {
 	"scripts": {
-		"dev": "trunk serve",
+		"dev": "trunk serve --watch ./src",
 		"build": "wasm-pack build . --target web"
 	},
 	"devDependencies": {
