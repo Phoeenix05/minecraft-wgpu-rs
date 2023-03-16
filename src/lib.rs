@@ -13,6 +13,7 @@ use wasm_bindgen::prelude::*;
 mod gpu_types;
 mod state;
 mod texture;
+mod world;
 use state::State;
 
 #[cfg_attr(target_arch = "wasm32", wasm_bindgen(start))]
