@@ -1,12 +1,14 @@
 use anyhow::*;
 use image::GenericImageView;
 
+#[allow(dead_code)]
 pub struct Texture {
     pub texture: wgpu::Texture,
     pub view: wgpu::TextureView,
     pub sampler: wgpu::Sampler,
 }
 
+#[allow(dead_code)]
 impl Texture {
     pub fn from_bytes(
         device: &wgpu::Device,
@@ -43,7 +45,7 @@ impl Texture {
             view_formats: &[],
         });
 
-        log::warn!("queue.write_texture(...)");
+        // log::warn!("queue.write_texture(...)");
         queue.write_texture(
             wgpu::ImageCopyTexture {
                 texture: &texture,
@@ -54,11 +56,12 @@ impl Texture {
             &rgba,
             wgpu::ImageDataLayout {
                 offset: 0,
-                bytes_per_row: std::num::NonZeroU32::new(4 * dimensions.0),
+                bytes_per_row: std::num::NonZeroU32::new(3 * dimensions.0),
                 rows_per_image: std::num::NonZeroU32::new(dimensions.1),
             },
             size,
         );
+        // log::warn!("queue.write_texture(...)");
 
         let view = texture.create_view(&wgpu::TextureViewDescriptor::default());
         let sampler = device.create_sampler(&wgpu::SamplerDescriptor {
