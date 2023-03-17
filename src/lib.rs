@@ -10,6 +10,7 @@ use wasm_bindgen::prelude::*;
 // #[cfg(target_arch = "wasm32")]
 // use tauri::Window;
 
+mod camera;
 mod gpu_types;
 mod state;
 mod texture;
