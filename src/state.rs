@@ -3,9 +3,9 @@ use winit::window::Window;
 
 // use std::sync::{Arc, Mutex};
 
-use crate::camera::{Camera, CameraUniform};
+use crate::camera::{Camera, CameraController, CameraUniform};
 use crate::gpu_types::{Vertex, INDICES, VERTICES};
-use crate::texture;
+use crate::texture::{self, Texture};
 
 pub struct State {
     surface: wgpu::Surface,
@@ -18,6 +18,7 @@ pub struct State {
     camera_uniform: CameraUniform,
     camera_buffer: wgpu::Buffer,
     camera_bind_group: wgpu::BindGroup,
+    camera_controller: CameraController,
     render_pipeline: wgpu::RenderPipeline,
     vertex_buffer: wgpu::Buffer,
     index_buffer: wgpu::Buffer,
@@ -25,7 +26,7 @@ pub struct State {
     #[allow(dead_code)]
     diffuse_bind_group: wgpu::BindGroup,
     #[allow(dead_code)]
-    diffuse_texture: Option<texture::Texture>,
+    diffuse_texture: Texture,
 }
 
 impl State {
@@ -87,44 +88,44 @@ impl State {
         surface.configure(&device, &config);
 
         #[allow(unused_variables)]
-        let diffuse_bytes = include_bytes!("../happy-tree.png");
-        // let diffuse_texture =
-        //     texture::Texture::from_bytes(&device, &queue, diffuse_bytes, "happy-tree.png").unwrap();
+        let diffuse_bytes = include_bytes!("../stone.png");
+        let diffuse_texture =
+            texture::Texture::from_bytes(&device, &queue, diffuse_bytes, "happy-tree.png").unwrap();
 
         let texture_bind_group_layout =
             device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
                 label: Some("texture_bind_group_layout"),
                 entries: &[
-                    // wgpu::BindGroupLayoutEntry {
-                    //     binding: 0,
-                    //     visibility: wgpu::ShaderStages::FRAGMENT,
-                    //     ty: wgpu::BindingType::Texture {
-                    //         multisampled: false,
-                    //         view_dimension: wgpu::TextureViewDimension::D2,
-                    //         sample_type: wgpu::TextureSampleType::Float { filterable: true },
-                    //     },
-                    //     count: None,
-                    // },
-                    // wgpu::BindGroupLayoutEntry {
-                    //     binding: 1,
-                    //     visibility: wgpu::ShaderStages::FRAGMENT,
-                    //     ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
-                    //     count: None,
-                    // },
+                    wgpu::BindGroupLayoutEntry {
+                        binding: 0,
+                        visibility: wgpu::ShaderStages::FRAGMENT,
+                        ty: wgpu::BindingType::Texture {
+                            multisampled: false,
+                            view_dimension: wgpu::TextureViewDimension::D2,
+                            sample_type: wgpu::TextureSampleType::Float { filterable: true },
+                        },
+                        count: None,
+                    },
+                    wgpu::BindGroupLayoutEntry {
+                        binding: 1,
+                        visibility: wgpu::ShaderStages::FRAGMENT,
+                        ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
+                        count: None,
+                    },
                 ],
             });
         let diffuse_bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
             label: Some("diffuse_bind_group"),
             layout: &texture_bind_group_layout,
             entries: &[
-                // wgpu::BindGroupEntry {
-                //     binding: 0,
-                //     resource: wgpu::BindingResource::TextureView(&diffuse_texture.view),
-                // },
-                // wgpu::BindGroupEntry {
-                //     binding: 1,
-                //     resource: wgpu::BindingResource::Sampler(&diffuse_texture.sampler),
-                // },
+                wgpu::BindGroupEntry {
+                    binding: 0,
+                    resource: wgpu::BindingResource::TextureView(&diffuse_texture.view),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 1,
+                    resource: wgpu::BindingResource::Sampler(&diffuse_texture.sampler),
+                },
             ],
         });
 
@@ -171,6 +172,8 @@ impl State {
             }],
         });
 
+        let camera_controller = CameraController::new(0.2);
+
         // Shortcut
         // let shader = device.create_shader_module(wgpu::include_wgsl!("shader.wgsl"));
         let shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
@@ -183,7 +186,7 @@ impl State {
                 label: Some("Render Pipeline Layout"),
                 bind_group_layouts: &[
                     /* &texture_bind_group_layout */
-                    &camera_bind_group_layout
+                    &camera_bind_group_layout,
                 ],
                 push_constant_ranges: &[],
             });
@@ -258,11 +261,12 @@ impl State {
             index_buffer,
             num_indices,
             diffuse_bind_group,
-            diffuse_texture: None,
+            diffuse_texture,
             camera,
             camera_uniform,
             camera_buffer,
             camera_bind_group,
+            camera_controller,
         }
     }
 
@@ -284,13 +288,21 @@ impl State {
 
     /// Input event handler, such as key press and mouse motion.
     /// #[allow(dead_code)] : this function isn't required to be used.
-    #[allow(dead_code)]
-    #[allow(unused_variables)]
+    // #[allow(dead_code)]
+    // #[allow(unused_variables)]
     pub fn input(&mut self, event: &winit::event::WindowEvent) -> bool {
-        false
+        self.camera_controller.process_events(event)
     }
 
-    pub fn update(&mut self) {}
+    pub fn update(&mut self) {
+        self.camera_controller.update_camera(&mut self.camera);
+        self.camera_uniform.update_view_proj(&self.camera);
+        self.queue.write_buffer(
+            &self.camera_buffer,
+            0,
+            bytemuck::cast_slice(&[self.camera_uniform]),
+        );
+    }
 
     /// Render the contents of the window / canvas.
     pub fn render(&mut self) -> Result<(), wgpu::SurfaceError> {
@@ -328,8 +340,8 @@ impl State {
             });
 
             render_pass.set_pipeline(&self.render_pipeline);
-            // render_pass.set_bind_group(0, &self.diffuse_bind_group, &[]);
-            render_pass.set_bind_group(0, &self.camera_bind_group, &[]);
+            render_pass.set_bind_group(0, &self.diffuse_bind_group, &[]);
+            render_pass.set_bind_group(1, &self.camera_bind_group, &[]);
             render_pass.set_vertex_buffer(0, self.vertex_buffer.slice(..));
             render_pass.set_index_buffer(self.index_buffer.slice(..), wgpu::IndexFormat::Uint16);
             render_pass.draw_indexed(0..self.num_indices, 0, 0..1);

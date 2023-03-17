@@ -2,7 +2,7 @@
 #[derive(Debug, Clone, Copy, bytemuck::Pod, bytemuck::Zeroable)]
 pub struct Vertex {
     pub position: [f32; 3],
-    pub color: [f32; 3],
+    pub tex_coords: [f32; 2],
 }
 
 impl Vertex {
@@ -21,7 +21,7 @@ impl Vertex {
                     format: wgpu::VertexFormat::Float32x3,
                 },
                 wgpu::VertexAttribute {
-                    offset: mem::size_of::<[f32; 3]>() as wgpu::BufferAddress,
+                    offset: mem::size_of::<[f32; 2]>() as wgpu::BufferAddress,
                     shader_location: 1,
                     format: wgpu::VertexFormat::Float32x3,
                 },
@@ -46,10 +46,10 @@ impl Vertex {
 
 #[rustfmt::skip]
 pub const VERTICES: &[Vertex] = &[
-    Vertex { position: [-0.5,  0.5, 0.0], color: [1.0, 0.0, 1.0] }, // A
-    Vertex { position: [-0.5, -0.5, 0.0], color: [0.0, 1.0, 1.0] }, // B
-    Vertex { position: [ 0.5,  0.5, 0.0], color: [0.0, 0.0, 1.0] }, // C
-    Vertex { position: [ 0.5, -0.5, 0.0], color: [0.0, 0.0, 0.0] }, // D
+    Vertex { position: [-0.5,  0.5, 0.0], tex_coords: [1.0, 0.0] }, // A
+    Vertex { position: [-0.5, -0.5, 0.0], tex_coords: [0.0, 1.0] }, // B
+    Vertex { position: [ 0.5,  0.5, 0.0], tex_coords: [0.0, 0.0] }, // C
+    Vertex { position: [ 0.5, -0.5, 0.0], tex_coords: [0.0, 0.0] }, // D
     // Vertex { position: [ 0.44147372,  0.2347359,  0.0], color: [0.0, 0.0, 1.0], }, // E
 ];
 
