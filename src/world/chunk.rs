@@ -1,3 +1,7 @@
+#![allow(dead_code)]
+#![allow(unused_variables)]
+#![allow(unused_imports)]
+
 use std::collections::HashMap;
 
 use crate::world::block::Block;

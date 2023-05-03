@@ -87,8 +87,7 @@ impl State {
         };
         surface.configure(&device, &config);
 
-        #[allow(unused_variables)]
-        let diffuse_bytes = include_bytes!("../stone.png");
+        let diffuse_bytes = include_bytes!("happy-tree.png");
         let diffuse_texture =
             texture::Texture::from_bytes(&device, &queue, diffuse_bytes, "happy-tree.png").unwrap();
 
@@ -185,7 +184,7 @@ impl State {
             device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
                 label: Some("Render Pipeline Layout"),
                 bind_group_layouts: &[
-                    /* &texture_bind_group_layout */
+                    &texture_bind_group_layout,
                     &camera_bind_group_layout,
                 ],
                 push_constant_ranges: &[],
@@ -250,7 +249,6 @@ impl State {
 
         // Create the state object.
         Self {
-            window,
             surface,
             device,
             queue,
@@ -260,13 +258,14 @@ impl State {
             vertex_buffer,
             index_buffer,
             num_indices,
-            diffuse_bind_group,
             diffuse_texture,
+            diffuse_bind_group,
             camera,
-            camera_uniform,
+            camera_controller,
             camera_buffer,
             camera_bind_group,
-            camera_controller,
+            camera_uniform,
+            window,
         }
     }
 
@@ -282,7 +281,8 @@ impl State {
             self.config.width = new_size.width;
             self.config.height = new_size.height;
             self.surface.configure(&self.device, &self.config);
-            // log::info!("resize");
+
+            self.camera.aspect = self.config.width as f32 / self.config.height as f32;
         }
     }
 
